@@ -1,0 +1,111 @@
+module Write_Arbiter(
+    input ACLK,
+	input ARESETn,
+    //write data address
+    input [31:0]  AWADDR_M0,   //addr
+    input [31:0]  AWADDR_M1,
+    input AWVALID_M0,          //valid
+    input AWVALID_M1,
+    //
+    input BVALID_M0,           
+    input BVALID_M1,
+    input BREADY_M0,
+    input BREADY_M1,
+    //
+    output logic [1:0] Aibiter_Write_State_control,
+    output logic [3:0] Arbiter_AWID_control   //add ID bit to slave
+
+);
+
+
+logic [31:0] AWADDR_regtemp;
+
+always_ff @(posedge ACLK or negedge ARESETn) begin
+    if(!ARESETn)  Aibiter_Write_State_control <= 2'b00;
+    else if((BVALID_M0 && BREADY_M0) || (BVALID_M1 && BREADY_M1))//maybe have to add Rlast(after added burst)
+        Aibiter_Write_State_control <= 2'b00;
+    else if(Aibiter_Write_State_control == 2'b00)
+    begin
+        case({AWVALID_M0, AWVALID_M1})    //polling arbiter
+            2'b00:Aibiter_Write_State_control <= 2'b00;
+            2'b01:Aibiter_Write_State_control <= 2'b10;   //M1 is 1,next M0 is 1.
+            default:Aibiter_Write_State_control <= 2'b01; //default( (M0=1 & M1=1) or (M0=1 & M1=0))
+        endcase
+    end
+    else Aibiter_Write_State_control <= Aibiter_Write_State_control;
+end
+
+
+always_comb begin
+    case(Aibiter_Write_State_control)
+        2'b00:
+        begin
+            if(AWVALID_M0)
+            begin
+                Arbiter_AWID_control[3] = 1'b0;
+                if(AWADDR_M0[31:17] == 15'b0)   //check Slave1 address is correct?
+                begin
+                    if(AWADDR_M0[16] == 1'b0) 
+                        Arbiter_AWID_control[2:0] = 3'b001;//M0_S0(4'b0001)
+                    else 
+                        Arbiter_AWID_control[2:0] = 3'b010;//M0_S1(4'b0010)
+                end
+                else    Arbiter_AWID_control[2:0] = 3'b100;//M0_Default_Slave(4'b0100)
+            end
+            else if(AWVALID_M1)
+            begin
+                Arbiter_AWID_control[3] = 1'b1;
+                if(AWADDR_M1[31:17] == 15'b0)   //check Slave1 address is correct?
+                begin
+                    if(AWADDR_M1[16] == 1'b0) 
+                        Arbiter_AWID_control[2:0] = 3'b001;//M0_S0(4'b1001)
+                    else 
+                        Arbiter_AWID_control[2:0] = 3'b010;//M0_S1(4'b1010)
+                end
+                else    Arbiter_AWID_control[2:0] = 3'b100;//M1_Default_Slave(4'b1100)
+            end
+            else        Arbiter_AWID_control = 4'b0000;
+        end
+        2'b01://M0
+        begin
+            Arbiter_AWID_control[3] = 1'b0;
+            if(AWADDR_regtemp[31:17] == 15'b0)      //check Slave1 address is correct?
+            begin
+                if(AWADDR_regtemp[16] == 1'b0)
+                    Arbiter_AWID_control[2:0] = 3'b001;//M0_S0
+                else
+                    Arbiter_AWID_control[2:0] = 3'b010;//M0_S1
+            end
+            else    Arbiter_AWID_control[2:0] = 3'b100;//M0_Default_Slave
+        end
+        2'b10://M1
+        begin
+            Arbiter_AWID_control[3] = 1'b1;
+            if(AWADDR_regtemp[31:17] == 15'b0)      //check Slave2 address is correct?
+            begin
+                if(AWADDR_regtemp[16] == 1'b0)
+                    Arbiter_AWID_control[2:0] = 3'b001;//M1_S0
+                else
+                    Arbiter_AWID_control[2:0] = 3'b010;//M1_S1
+            end
+            else    Arbiter_AWID_control[2:0] = 3'b100;//M1_Default_Slave
+        end
+        default:    Arbiter_AWID_control = 4'b0000;
+    endcase
+end
+
+
+always_ff @ (posedge ACLK or negedge ARESETn) begin
+    if (!ARESETn) AWADDR_regtemp <= 32'd0;
+    else begin
+		if (AWVALID_M0 && Aibiter_Write_State_control == 2'b00) AWADDR_regtemp <= AWADDR_M0;
+		else if (AWVALID_M1 && Aibiter_Write_State_control == 2'b00) AWADDR_regtemp <= AWADDR_M1;
+		else AWADDR_regtemp <= AWADDR_regtemp;      //Keep the address when Slave is busy.
+    end
+end
+
+//DECERR:Default slave ➔ Response ERROR when Master access (BRESP == DECERR) it
+
+
+
+endmodule
