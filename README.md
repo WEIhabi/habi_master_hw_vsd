@@ -6,4 +6,4 @@
 2. Proj2 is origin CPU connecting to AXI protocol, in this project, writting the arbiter, AXI and AXI wrapper first time.
 3. Proj3 is following previous work, added cache in our CPU, because cache is inside CPU, for increase total performance, reduce data access memory time.
 4. Proj4 is following previous work, added CSR instructions, CSR registers, interrupt control, DRAM wrapper and ROM wrapper.
-5. Proj5 is total put them togather, and added a new IP is JPEG decoder, but not do well, so no put it on github.
+5. Proj5 is total put them togather, and added a new IP is JPEG decoder.
